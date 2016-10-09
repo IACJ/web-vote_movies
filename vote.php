@@ -59,7 +59,8 @@ class Vote{
 			$this->throw_exception("Unknown id    $bool" );
 		}else{
 			self::$response = 1;
-			self::$info = "vote succeed";
+			$_SESSION['token'] = md5(microtime(true));
+			self::$info = $_SESSION['token'];
 			$this->responseJSON();
 		}
 	}
@@ -153,11 +154,11 @@ class Vote{
 
  // ______main________
  //	假设输入  （假设有5部电影）
- //$_POST = array(1 =>1, 2=>1, 3=>0, 4=>1, 5=>1 );
+ $_POST = array(1 =>1, 2=>1, 3=>0, 4=>1, 5=>1 );
  // 
  // 
  // 假设输入:
- $_GET = array('id' => 4);
+ //$_GET = array('id' => 4);
 
 session_start();
 $Vote = new Vote();
