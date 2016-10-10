@@ -1,6 +1,6 @@
 <?php   
 header('Content-Type: text/html; charset=utf-8');
-require "config.php";
+require_once "config.php";
 
 class Stamp{
 
@@ -9,15 +9,27 @@ class Stamp{
 	public static $dbVersion =""; //db版本
 	public static $link =null;     // pdoLink
 
+	//生成一个新的印花
+	public function newStamp(){
+		if (!$this->createPDO()){
+			return false;
+		}
 
+		$id = 0;
+		do{
+		$id = rand(10000000,99999999);
+		$PDOStatement = self::$link->prepare("SELECT * FROM `stamp` WHERE `name` = $id");
+		$PDOStatement->execute();
+		$result=$PDOStatement->fetch(constant("PDO::FETCH_ASSOC"));
+		}while($result !=false);
 
-	//表单验证
-	protected function check(){
-		//-------TODO：时间验证-----------
-		//-------TODO：防空验证-----------
-		//-------TODO：token验证-----------
-		return true;
+		$sql = "INSERT INTO `stamp`(`id`, `name`, `received`, `used`, `gettime`) VALUES ('',\"$id\",0,0,now())";
+		$PDOStatement = self::$link->prepare($sql);
+		$PDOStatement->execute();
+
+		return $id;
 	}
+
 
 	//创建一个PDO对象
 	protected function createPDO(){
@@ -29,11 +41,12 @@ class Stamp{
 			return false;
 		}
 		self::$link->exec('SET NAMES '.DB_CHARSET);
+		return true;
 		self::$info = "";
 		self::$response = 0;
 		self::$dbVersion = self::$link->getAttribute(constant("PDO::ATTR_SERVER_VERSION"));
-		return true;
 	}
+
 
 
 
@@ -58,38 +71,6 @@ class Stamp{
 
 
 
- // ______main________
- //	假设输入  （假设有5部电影）
- //$_POST = array(1 =>1, 2=>1, 3=>0, 4=>1, 5=>1 );
- // 
- // 
- // 假设输入:
- $_GET = array('id' => 4);
-
-session_start();
-$Vote = new Vote();
-
-if (!empty($_GET['id'])){
-	$id = $_GET['id'];
-	if (is_numeric($id)){
-		$Vote->getInfo($id);
-	}else{
-		$Vote->UndefinedRequest();
-	}
-	return;
-}
-
-if (!empty($_POST)) {
-	foreach ($_POST as $key => $value) {
-		if (!is_numeric($key)){
-			$Vote->UndefinedRequest();
-			return;
-		}
-	}
-	$Vote->upvote();
-	return;
-}
-$Vote->UndefinedRequest();
 
 
 

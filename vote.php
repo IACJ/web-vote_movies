@@ -1,18 +1,19 @@
 <?php   
 header('Content-Type: text/html; charset=utf-8');
-require "config.php";
+require_once "config.php";
+require_once "stamp.php";
 
 class Vote{
 
 	public static $info = "";   //信息提示
-	public static $response = 0; //返回状态码 1:成功,-1:已知错误,-2:未知错误
+	public static $response = 0; //返回状态码 1:成功,-1:已知错误,-2:验证码错误
 	public static $dbVersion =""; //db版本
 	public static $link =null;     // pdoLink
 
 	//获取电影信息
 	public function getInfo($key){
-		//--------表单验证 并 创建POD--------
-		if (!$this->check() || !$this->createPDO()){
+		//--------创建POD--------
+		if (!$this->createPDO()){
 			return false;
 		}
 		$sql = "SELECT * FROM `vote` WHERE `id` = :id";
@@ -41,16 +42,16 @@ class Vote{
     //投票
 	public function upvote(){
 		//--------表单验证 并 创建POD--------
-		if (!$this->check() || !$this->createPDO()){
+		if (!$this->upvoteCheck() || !$this->createPDO()){
 			return false;
 		}
 
 		//--------投票-----------
 		$bool = "";  //未识别的电影 id
-		foreach ($_POST as $key => $value) {
-			if ($value == 1){
-				if(!$this->plusOne($key)){
-					$bool .=" ".$key;
+		for ($i=1; $i <= MOVIE_NUMBER ; $i++) { 
+			if ($_POST[$i] == 1){
+				if(!$this->plusOne($i)){
+					$bool .=" ".$i;
 				}
 			}
 		}
@@ -59,8 +60,9 @@ class Vote{
 			$this->throw_exception("Unknown id    $bool" );
 		}else{
 			self::$response = 1;
-			$_SESSION['token'] = md5(microtime(true));
-			self::$info = $_SESSION['token'];
+			$stamp = new Stamp;
+			$stampId = $stamp->newStamp();
+			self::$info = $stampId;
 			$this->responseJSON();
 		}
 	}
@@ -104,10 +106,27 @@ class Vote{
 	}
 
 	//表单验证
-	protected function check(){
+	protected function upvoteCheck(){
 		//-------TODO：时间验证-----------
-		//-------TODO：防空验证-----------
-		//-------TODO：token验证-----------
+
+
+		//-------电影id验证-----------
+		for ($i=1; $i <= MOVIE_NUMBER ; $i++) { 
+			if (!isset($_POST[$i]) || !is_numeric($_POST[$i])){
+				$this->UndefinedRequest();
+				return false;
+			}
+		}
+		//-------验证码验证-----------	
+		if (!isset($_POST['captcha']) ||!isset($_SESSION['authcode']) || strtolower($_POST['captcha'])!=$_SESSION['authcode']){
+			unset($_SESSION['authcode']);
+			self::$response = -2;
+			self::$info = "captcha is wrong";
+			$this->responseJSON();
+			return false;
+		}
+		unset($_SESSION['authcode']);
+
 		return true;
 	}
 
@@ -153,12 +172,14 @@ class Vote{
 
 
  // ______main________
- //	假设输入  （假设有5部电影）
- $_POST = array(1 =>1, 2=>1, 3=>0, 4=>1, 5=>1 );
  // 
+ // （假设有5部电影）
+define('MOVIE_NUMBER',5);
+ //	假设输入  
+ $_POST = array('captcha'=>'mhr6', 1 =>1, 2=>1, 3=>0, 4=>1, 5=>1 );
  // 
  // 假设输入:
- //$_GET = array('id' => 4);
+ // $_GET = array('id' => 2);
 
 session_start();
 $Vote = new Vote();
@@ -174,15 +195,10 @@ if (!empty($_GET['id'])){
 }
 
 if (!empty($_POST)) {
-	foreach ($_POST as $key => $value) {
-		if (!is_numeric($key)){
-			$Vote->UndefinedRequest();
-			return;
-		}
-	}
 	$Vote->upvote();
 	return;
 }
+
 $Vote->UndefinedRequest();
 
 
