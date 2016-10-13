@@ -14,19 +14,17 @@ class Stamp{
 		if (!$this->createPDO()){
 			return false;
 		}
-
 		$id = 0;
+		$count = 0;
 		do{
 		$id = rand(10000000,99999999);
-		$PDOStatement = self::$link->prepare("SELECT * FROM `stamp` WHERE `name` = $id");
-		$PDOStatement->execute();
-		$result=$PDOStatement->fetch(constant("PDO::FETCH_ASSOC"));
-		}while($result !=false);
+        $sql = "SELECT COUNT(*) FROM `stamp` WHERE `name` = $id";
+        $count = self::$link->query($sql)->fetchColumn();
+		}while($count !=0);
 
 		$sql = "INSERT INTO `stamp`(`id`, `name`, `received`, `used`, `gettime`) VALUES ('',\"$id\",0,0,now())";
 		$PDOStatement = self::$link->prepare($sql);
 		$PDOStatement->execute();
-
 		return $id;
 	}
 
