@@ -1,5 +1,5 @@
 <?php
-	header('Access-Control-Allow-Origin: *');  
+//	header('Access-Control-Allow-Origin: *');  
     session_start();
     $image = imagecreatetruecolor( 100, 30 );
 	$bgcolor = imagecolorallocate( $image, 255, 255, 255 );
