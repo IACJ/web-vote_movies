@@ -2,12 +2,11 @@
 header('Content-Type: text/html; charset=utf-8');
 header('Access-Control-Allow-Origin: *');  
 require_once "config.php";
-require_once "stamp.php";
 
 class Vote{
 
 	public static $info = "";   //信息提示
-	public static $response = 0; //返回状态码 1:成功,-1:已知错误,-2:验证码错误
+	public static $response = 0; //返回状态码 1:成功,-1:已知错误,-2:验证码错误，-3:ip多次使用
 	public static $dbVersion =""; //db版本
 	public static $link =null;     // pdoLink
 
@@ -51,8 +50,7 @@ class Vote{
 		if ($bool != "" ){
 			$this->throw_exception("Unknown id : $bool" );
 		}else{
-			$stamp = new Stamp;
-			$stampId = $stamp->newStamp();
+			$stampId = $this->newStamp();
 			self::$response = 1;
 			self::$info = $stampId;
 			$this->responseJSON();
@@ -114,8 +112,33 @@ class Vote{
 		// 	return false;
 		// }
 		// unset($_SESSION['authcode']);
-
 		return true;
+	}
+
+	//生成一个新的印花
+	public function newStamp(){
+		if (!$this->createPDO()){
+			return false;
+		}
+		$id = 0;
+		$count = 0;
+		do{
+		$id = rand(10000000,99999999);
+        $sql = "SELECT COUNT(*) FROM `stamp` WHERE `name` = $id";
+        $count = self::$link->query($sql)->fetchColumn();
+		}while($count !=0);
+
+		$sql = "INSERT INTO `stamp`(`id`, `name`, `received`, `used`, `gettime`, `receivetime`, `usetime`) VALUES (null,\"$id\",0,0,now(),null,null)";
+		$PDOStatement = self::$link->prepare($sql);
+		$PDOStatement->execute();
+		//检查是否出错
+		$arrError = $PDOStatement->errorInfo();
+		if ($arrError[0] !='00000') {
+			$errMsg = 'SQLSTAE: '.$arrError[0].'  SQL Error: '.$arrError[2];
+			$this->throw_exception($errMsg);
+			return false;
+		}
+		return $id;
 	}
 
 	//创建一个PDO对象
@@ -160,13 +183,6 @@ class Vote{
 	protected function IPVerification(){
 		define('ONE_IP_MAX_VOTE', 10);
 		$ip = $this->getIP();
-		//------------------------------------------------------------------------------------
-		// if(!$res1 = file_get_contents("http://ip.taobao.com/service/getIpInfo.php?ip=$ip")){
-		// 	$this->throw_exception("taobao ip API error");
-		// 	return false;
-		// }
-		$res1 = "wozijixiangde";
-		//------------------------------------------------------------------------------------
 		$votestr = $_POST['vote'];
 		$HTTP_X_FORWARDED_FOR= '';
 		$HTTP_CLIENT_IP = '';
@@ -195,7 +211,7 @@ class Vote{
         //检查是否出错
 
         if ($count >= ONE_IP_MAX_VOTE){
-	        $sql = "INSERT INTO `ips`(`id`, `ip`, `HTTP_X_FORWARDED_FOR`, `HTTP_CLIENT_IP`, `REMOTE_ADDR`, `info`, `vote`, `time`,`isstoped`) VALUES ('',:ip,:HTTP_X_FORWARDED_FOR,:HTTP_CLIENT_IP,:REMOTE_ADDR,:res1,:votestr,now(),1)";
+	        $sql = "INSERT INTO `ips`(`id`, `ip`, `HTTP_X_FORWARDED_FOR`, `HTTP_CLIENT_IP`, `REMOTE_ADDR`,  `vote`, `time`,`isstoped`) VALUES (null,:ip,:HTTP_X_FORWARDED_FOR,:HTTP_CLIENT_IP,:REMOTE_ADDR,:votestr,now(),1)";
 			$PDOStatement = self::$link->prepare($sql);
 			$PDOStatement->execute(
 					array(
@@ -203,14 +219,13 @@ class Vote{
 						':HTTP_X_FORWARDED_FOR' =>$HTTP_X_FORWARDED_FOR,
 						':HTTP_CLIENT_IP' => $HTTP_CLIENT_IP,
 						':REMOTE_ADDR' => $REMOTE_ADDR,
-						':res1' => $res1, 
 						':votestr' => $votestr));
 			self::$response = -3;
 			self::$info = "ip used too many times";
 			$this->responseJSON();
 			return false;
         }else{
-	        $sql = "INSERT INTO `ips`(`id`, `ip`, `HTTP_X_FORWARDED_FOR`, `HTTP_CLIENT_IP`, `REMOTE_ADDR`, `info`, `vote`, `time`,`isstoped`) VALUES ('',:ip,:HTTP_X_FORWARDED_FOR,:HTTP_CLIENT_IP,:REMOTE_ADDR,:res1,:votestr,now(),0)";
+	        $sql = "INSERT INTO `ips`(`id`, `ip`, `HTTP_X_FORWARDED_FOR`, `HTTP_CLIENT_IP`, `REMOTE_ADDR`,  `vote`, `time`,`isstoped`) VALUES (null,:ip,:HTTP_X_FORWARDED_FOR,:HTTP_CLIENT_IP,:REMOTE_ADDR,:votestr,now(),0)";
 			$PDOStatement = self::$link->prepare($sql);
 			$PDOStatement->execute(
 					array(
@@ -218,8 +233,14 @@ class Vote{
 						':HTTP_X_FORWARDED_FOR' =>$HTTP_X_FORWARDED_FOR,
 						':HTTP_CLIENT_IP' => $HTTP_CLIENT_IP,
 						':REMOTE_ADDR' => $REMOTE_ADDR,
-						':res1' => $res1, 
 						':votestr' => $votestr));
+					//检查是否出错
+			$arrError = $PDOStatement->errorInfo();
+			if ($arrError[0] !='00000') {
+				$errMsg = 'SQLSTAE: '.$arrError[0].'  SQL Error: '.$arrError[2];
+				$this->throw_exception($errMsg);
+				return false;
+			}
 			return true;
         }
 	}
@@ -227,7 +248,7 @@ class Vote{
 	//拿到json
 	public function getjson(){
 		$this->createPDO();
-		$sql = "SELECT `id`, `name` FROM `vote` ";
+		$sql = "SELECT `id`, `name`,`details` FROM `vote` ";
 		$stmt = self::$link->prepare($sql);
 		$stmt->execute();
 		$all = $stmt->fetchALL(PDO::FETCH_ASSOC);// Use fetchAll() if you want all 
@@ -260,14 +281,13 @@ class Vote{
  // ______main________
 define('MOVIE_NUMBER',50);
  //	假设输入  
-$_POST = array( "vote" => '{"1":0,"2":0,"3":0,"4":0,"5":0,"6":0,"7":0,"8":0,"9":0,"10":0,"11":0,"12":0,"13":0,"14":0,"15":0,"16":0,"17":0,"18":0,"19":0,"20":0,"21":0,"22":0,"23":0,"24":0,"25":0,"26":0,"27":0,"28":0,"29":0,"30":0,"31":0,"32":0,"33":0,"34":0,"35":0,"36":0,"37":0,"38":0,"39":0,"40":0,"41":0,"42":0,"43":0,"44":0,"45":0,"46":0,"47":0,"48":0,"49":0,"50":0}');
+// $_POST = array( "vote" => '{"1":0,"2":0,"3":0,"4":0,"5":0,"6":0,"7":0,"8":0,"9":0,"10":0,"11":0,"12":0,"13":0,"14":0,"15":0,"16":0,"17":0,"18":0,"19":0,"20":0,"21":0,"22":0,"23":0,"24":0,"25":0,"26":0,"27":0,"28":0,"29":0,"30":0,"31":0,"32":0,"33":0,"34":0,"35":0,"36":0,"37":0,"38":0,"39":0,"40":0,"41":0,"42":0,"43":0,"44":0,"45":0,"46":0,"47":0,"48":0,"49":0,"50":0}');
  // 
  // 假设输入:
  // $_GET = array('id' => 8);
 
 session_start();
 $Vote = new Vote();
-
 if (!empty($_GET['id'])){
 	$id = $_GET['id'];
 	if (is_numeric($id)){
